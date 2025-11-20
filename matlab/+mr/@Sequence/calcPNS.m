@@ -58,6 +58,19 @@ for i=1:3
     end
 end
 
+if length(hardware) == 2
+    wt = [1 1 1];  % channel weights. Make it an optional input and use for both models?
+    Smin = hardware(1);
+    chronaxie = hardware(2);
+    [pns, p] = pnsnir(Smin, chronaxie, gwr'/obj.sys.gamma, obj.gradRasterTime, wt);
+
+    % fill pns_norm, pns_comp here -- not sure how
+
+    % construct ok based on <80% treshold (normal mode) or <100% (first controlled mode)
+
+    return
+end
+
 asc=[];
 ascHasCNS=false;
 if ischar(hardware)
@@ -177,5 +190,54 @@ else
     hw.y.g_scale = asc.flGCGScaleFactorY;
     hw.z.g_scale = asc.flGCGScaleFactorZ;
 end
+
+end
+
+function [pt, p] = pnsnir(Smin, c, g, dt, wt)
+% function [pt, p] = pnsnir(Smin, c, g, dt, [wt = [1 1 1]])
+%
+% Calculate PNS using the nerve impulse response model in IEC 60601-2-33:2022.
+%
+% Inputs
+%   Smin   [1]     stimulation threshold (rheobase) for constant slew of infinite duration
+%                  Note: In GE lingo, Smin = r/alpha, r = rheobase, alpha = effective coil length
+%   c      [1]     chronaxie (sec). Nerve impulse response time constant
+%   g      [3 n]   x/y/z gradient waveform (T/m), for uniform (raster) sampling
+%   dt     [1]     gradient raster (sample) time (sec)
+%
+% Input options
+%   wt     [3]     Direction (channel) weights; PNS is worst along AP (physical y), 
+%                  followed by LR/x (factor 0.8 lower) and SI/HF/x (0.7). 
+%                  Default: [1 1 1]
+%                  Source: IEC 60601-2-33:2022 section (12)
+%
+% Output
+%   pt      [1 n]  channel-combined PNS waveform (% of stimulation threshold)
+%   p       [3 n]  PNS waveform on each gradient channel
+
+if nargin < 4
+    wt = [1 1 1];
+end
+
+assert(size(g,1) == 3 & size(g,1) < size(g,2), 'g must be size 3xn');
+
+n = size(g,2);
+
+% Contribution of a slew impulse at time 0 to PNS at time tau
+% IEC 60601-2-33:2022 Eq. AA.21
+tau = dt:dt:(20*c);  % no need to make much longer than chronaxie
+f = dt/Smin * c ./ (c +  tau).^2;
+
+% Convolve slew rate waveform with impulse response.
+% x/y/z channel weightings from IEC 60601-2-33:2022 section (12) 
+s = diff(g, 1, 2)/dt;     % T/m/s
+p = zeros(3, n);
+for ch = 1:3
+    tmp = wt(ch) * 100 * conv(s(ch,:), f);  % percent of stimulation threshold
+    p(ch,:) = tmp(1:n);
+end
+
+% return total (gradient-combined) PNS waveform
+pt = sqrt(sum(p.^2,1));    
 
 end
