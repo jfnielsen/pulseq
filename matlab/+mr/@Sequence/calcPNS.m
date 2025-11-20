@@ -64,8 +64,6 @@ if length(hardware) == 2
     chronaxie = hardware(2);
     [pns, p] = pnsnir(Smin, chronaxie, gwr'/obj.sys.gamma, obj.gradRasterTime, wt);
 
-    % fill pns_norm, pns_comp here -- not sure how
-
     % construct ok based on <80% treshold (normal mode) or <100% (first controlled mode)
 
     return
